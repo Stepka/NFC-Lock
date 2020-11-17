@@ -137,29 +137,29 @@ void setup() {
 
   nfc.begin();
 
-//  Serial.print("Srart...");
+  Serial.print("Srart...");
 
   uint32_t versiondata = nfc.getFirmwareVersion();
   if (! versiondata) {
-//    Serial.print("Didn't find PN53x board");
+    Serial.print("Didn't find PN53x board");
     while (1); // halt
   }
   // Got ok data, print it out!
-//  Serial.print("Found chip PN5"); Serial.println((versiondata >> 24) & 0xFF, HEX);
-//  Serial.print("Firmware ver. "); Serial.print((versiondata >> 16) & 0xFF, DEC);
-//  Serial.print('.'); Serial.println((versiondata >> 8) & 0xFF, DEC);
+  Serial.print("Found chip PN5"); Serial.println((versiondata >> 24) & 0xFF, HEX);
+  Serial.print("Firmware ver. "); Serial.print((versiondata >> 16) & 0xFF, DEC);
+  Serial.print('.'); Serial.println((versiondata >> 8) & 0xFF, DEC);
 
   // configure board to read RFID tags
   nfc.SAMConfig();
 
   //
-
+  //
   locked = EEPROM.read(IS_LOCKED_ADDR);
   if (locked > 0) locked = 1;
   digitalWrite(13, locked);
   //
-//    byte db_pointer = KEYS_DB_ADDR;
-//    EEPROM.write(db_pointer, 0);
+  //    byte db_pointer = KEYS_DB_ADDR;
+  //    EEPROM.write(db_pointer, 0);
   //    write_keys_db();
 
   read_keys_db();
@@ -185,7 +185,7 @@ void setup() {
     ready_beep();
   }
 
-//  Serial.println("Waiting for a card...");
+  //  Serial.println("Waiting for a card...");
 }
 
 void loop() {
@@ -195,24 +195,25 @@ void loop() {
   uint8_t success;
   communication_state = WAITING_FOR_A_CARD;
 
-//  Serial.println("Listening...");
+  //  Serial.println("Listening...");
   uint8_t uid[] = { 0, 0, 0, 0, 0, 0, 0 };  // Buffer to store the returned UID
   uint8_t uidLength;                        // Length of the UID (4 or 7 bytes depending on ISO14443A card type)
   if (nfc.inListPassiveTarget(uid, &uidLength)) {
 
     if (uidLength != UID_SIZE)
     {
-//      Serial.println("UID size not supported");
+      //      Serial.println("UID size not supported");
       return;
     }
 
     if (lock_state == STATE_INIT) {
-//      Serial.println("There are no admin keys, adding new one...");
+      Serial.println("There are no admin keys, adding new one...");
       success = add_admin_key(uid);
       if (success)
       {
         admin_mode_start_beep();
         admin_mode_end_beep();
+        Serial.println("Admin key added");
         switch_state(STATE_LOCK);
       }
       else
@@ -225,9 +226,9 @@ void loop() {
     {
       known_key_found = false;
       for (byte i = 0; i < num_keys; i++) {
-//        Serial.println("Checking...");
-//        nfc.PrintHex(uid, UID_SIZE);
-//        nfc.PrintHex(keys[i].uid, UID_SIZE);
+        //        Serial.println("Checking...");
+        //        nfc.PrintHex(uid, UID_SIZE);
+        //        nfc.PrintHex(keys[i].uid, UID_SIZE);
         if (memcmp(uid, keys[i].uid, UID_SIZE) == 0)
         {
           key = keys[i];
@@ -239,7 +240,7 @@ void loop() {
       {
         if (key.type == KEY_TYPE_ADMIN)
         {
-//          Serial.println("It is known admin mifare card");
+          //          Serial.println("It is known admin mifare card");
           success = read_nfc_tag(uid, key.key_A, key.sector);
           if (success)
           {
@@ -252,14 +253,14 @@ void loop() {
               case STATE_ADMIN:
                 error_beep();
                 switch_state(STATE_LOCK);
-//                Serial.println("It is known mifare card, we do not need to add it again");
+                //                Serial.println("It is known mifare card, we do not need to add it again");
             }
             delay(1000);
           }
         }
         else if (key.type == KEY_TYPE_MIFARE_CLASSIC)
         {
-//          Serial.println("It is known mifare card");
+          //          Serial.println("It is known mifare card");
           switch (lock_state) {
 
             case STATE_LOCK:
@@ -277,7 +278,7 @@ void loop() {
               break;
 
             case STATE_ADMIN:
-//              Serial.println("It is known mifare card, we do not need to add it again");
+              //              Serial.println("It is known mifare card, we do not need to add it again");
               error_beep();
               break;
           }
@@ -285,7 +286,7 @@ void loop() {
         }
         else
         {
-//          Serial.println("It is android");
+          //          Serial.println("It is android");
           switch (lock_state) {
 
             case STATE_LOCK:
@@ -293,7 +294,7 @@ void loop() {
               break;
 
             case STATE_ADMIN:
-//              Serial.println("It is known android mobile, rewrite key");
+              //              Serial.println("It is known android mobile, rewrite key");
               remove_key(key);
               read_nfc_android(key.uid, key.key_A);
               break;
@@ -303,19 +304,21 @@ void loop() {
       }
       else
       {
-//        Serial.println("It is unknown object");
+        //        Serial.println("It is unknown object");
         switch (lock_state) {
 
           case STATE_ADMIN:
             success = read_nfc_android(uid, NULL);
             if (success)
             {
+              Serial.println("New android device added");
             }
             else
             {
               success = add_card_key(uid);
               if (success)
               {
+                Serial.println("New card added");
               }
               else
               {
@@ -337,7 +340,7 @@ void loop() {
     //    Serial.print("Trying again...");
   }
 
-//  Serial.println("Waiting for a card...");
+  //  Serial.println("Waiting for a card...");
 }
 
 void send_command(byte command, byte* data, uint8_t dataLength, byte *response) {
@@ -376,8 +379,8 @@ void communicate(byte *response) {
       for (byte i = 0; i < 16; i++) {
         rfid_data[i] = random(255);
       }
-//      Serial.println("Send key.");
-//      nfc.PrintHex(rfid_data, 16);
+      //      Serial.println("Send key.");
+      //      nfc.PrintHex(rfid_data, 16);
       send_command(RFID_ADD_KEY_COMMAND, rfid_data, 16, response);
       break;
 
@@ -410,7 +413,7 @@ boolean read_nfc_tag(byte* uid, byte* keya, uint8_t sector) {
   }
   else
   {
-//    Serial.println("read_nfc_tag: Auth failed");
+    //    Serial.println("read_nfc_tag: Auth failed");
     return false;
   }
 
@@ -457,13 +460,13 @@ uint8_t write_nfc_tag(byte* uid, byte* keya, byte* keyb) {
 
     if (success)
     {
-//      dump_byte_array(newkeys, 16);
-//      Serial.println("");
-//      Serial.println("write succesful");
+      //      dump_byte_array(newkeys, 16);
+      //      Serial.println("");
+      //      Serial.println("write succesful");
     }
     else
     {
-//      Serial.println("Ooops ... unable to write the requested block.  Try another key?");
+      //      Serial.println("Ooops ... unable to write the requested block.  Try another key?");
     }
   }
 
@@ -526,12 +529,12 @@ boolean read_nfc_android(byte* uid, byte* keya) {
               if (success)
               {
                 communication_state = SEND_ADDING_KEY_CONFIRMED;
-//                Serial.println("Key confirmed");
+                //                Serial.println("Key confirmed");
               }
             }
             else
             {
-//              Serial.println("Key not confirmed");
+              //              Serial.println("Key not confirmed");
               error_beep();
             }
             break;
@@ -549,7 +552,7 @@ boolean read_nfc_android(byte* uid, byte* keya) {
         single_data = responseData[1];
         switch (single_data) {
           case INFO_NO_PIN:
-//            Serial.println("No PIN");
+            //            Serial.println("No PIN");
             communication_state = WAITING_FOR_PIN;
             break;
           case INFO_TIMEOUT:
@@ -573,11 +576,11 @@ boolean read_nfc_android(byte* uid, byte* keya) {
 
         aes128.setKey(keya, aes128.keySize());
         aes128.decryptBlock(buffer, encrypted_str);
-//        Serial.println("key | got encrypted | decrypted");
-//        nfc.PrintHex(keya, 16);
-//        nfc.PrintHex(encrypted_str, 16);
-//        nfc.PrintHex(buffer, 16);
-//        Serial.println("");
+        //        Serial.println("key | got encrypted | decrypted");
+        //        nfc.PrintHex(keya, 16);
+        //        nfc.PrintHex(encrypted_str, 16);
+        //        nfc.PrintHex(buffer, 16);
+        //        Serial.println("");
         if (memcmp(buffer, rfid_data, 16) == 0) {
 
           single_data = responseData[16 + 1];
@@ -602,8 +605,8 @@ boolean read_nfc_android(byte* uid, byte* keya) {
 
 
       default:
-//        Serial.print("Unknown response: ");
-//        Serial.println(type, HEX);
+        //        Serial.print("Unknown response: ");
+        //        Serial.println(type, HEX);
         communication_state = WAITING_FOR_A_CARD;
         error_beep();
     }
@@ -718,6 +721,7 @@ void switch_state (byte newState) {
       switch (newState) {
         case STATE_ADMIN:
           admin_mode_start_beep();
+          Serial.println("Admin mode activated");
           break;
       }
       break;
@@ -728,6 +732,7 @@ void switch_state (byte newState) {
           break;
         default:
           admin_mode_end_beep();
+          Serial.println("Admin mode deactivated");
       }
       break;
   }
@@ -765,7 +770,7 @@ boolean add_key (KeyItem key) {
   }
   else
   {
-//    Serial.println("Key store is full");
+    //    Serial.println("Key store is full");
     return false;
   }
 }
@@ -836,26 +841,31 @@ void read_keys_db () {
 
   byte db_pointer = KEYS_DB_ADDR;
   num_keys = EEPROM.read(db_pointer);
+
+  if (num_keys > sizeof(keys)) {
+    num_keys = 0;
+  }
+
   db_pointer++;
-//  Serial.print("Car know ");
-//  Serial.print(num_keys);
-//  Serial.println(" keys");
+  Serial.print("Car know ");
+  Serial.print(num_keys);
+  Serial.println(" keys");
 
   for (byte i = 0; i < num_keys; i++) {
     EEPROM.get( db_pointer, key );
     db_pointer += sizeof(key);
 
-//    Serial.println( "" );
-//    Serial.print( "key #" );
-//    Serial.println( (i + 1) );
-//    Serial.println( key.type );
-//    Serial.println( key.sector );
-//    dump_byte_array( key.uid, sizeof(key.uid) );
-//    Serial.println( "" );
-//    dump_byte_array( key.key_A, sizeof(key.key_A) );
-//    Serial.println( "" );
-//    dump_byte_array( key.key_B, sizeof(key.key_B) );
-//    Serial.println( "" );
+    //    Serial.println( "" );
+    //    Serial.print( "key #" );
+    //    Serial.println( (i + 1) );
+    //    Serial.println( key.type );
+    //    Serial.println( key.sector );
+    //    dump_byte_array( key.uid, sizeof(key.uid) );
+    //    Serial.println( "" );
+    //    dump_byte_array( key.key_A, sizeof(key.key_A) );
+    //    Serial.println( "" );
+    //    dump_byte_array( key.key_B, sizeof(key.key_B) );
+    //    Serial.println( "" );
 
     keys[i] = key;
   }
