@@ -108,6 +108,9 @@ byte locked = 1;
 
 GTimer reset_timer(MS);
 
+//  RESET
+void (*resetFunction) (void) = 0;
+
 // STATE
 
 #define STATE_INIT (0)
@@ -120,9 +123,6 @@ byte lock_state = STATE_INIT;
 
 void setup() {
 
-  digitalWrite(12, HIGH);
-  delay(200);
-
   Serial.begin(9600);
 
   randomSeed(analogRead(0));
@@ -130,7 +130,6 @@ void setup() {
   pinMode(9, OUTPUT);
   pinMode(10, OUTPUT);
   pinMode(11, OUTPUT);
-  pinMode(12, OUTPUT);
   pinMode(13, OUTPUT);
   pinMode(A0, INPUT_PULLUP);
   pinMode(A1, INPUT_PULLUP);
@@ -201,7 +200,7 @@ void setup() {
 void loop() {
 
   if (reset_timer.isReady()) {
-    digitalWrite(12, LOW);
+    resetFunction();
   }
 
   KeyItem key;
