@@ -102,6 +102,12 @@ byte num_keys = 0;
 
 byte locked = 1;
 
+// TIMER
+
+#include "GyverTimer.h"
+
+GTimer reset_timer(MS);
+
 // STATE
 
 #define STATE_INIT (0)
@@ -114,7 +120,8 @@ byte lock_state = STATE_INIT;
 
 void setup() {
 
-  // запуск Serial
+  digitalWrite(12, HIGH);
+  delay(200);
 
   Serial.begin(9600);
 
@@ -123,17 +130,18 @@ void setup() {
   pinMode(9, OUTPUT);
   pinMode(10, OUTPUT);
   pinMode(11, OUTPUT);
+  pinMode(12, OUTPUT);
+  pinMode(13, OUTPUT);
   pinMode(A0, INPUT_PULLUP);
   pinMode(A1, INPUT_PULLUP);
   pinMode(A2, OUTPUT);
   pinMode(A3, OUTPUT);
-  pinMode(13, OUTPUT);
 
   pinMode(BUZZER, OUTPUT);
 
   noTone(BUZZER);
 
-  // запуск NFC
+  // NFC
 
   nfc.begin();
 
@@ -186,9 +194,15 @@ void setup() {
   }
 
   //  Serial.println("Waiting for a card...");
+
+  reset_timer.setTimeout(190080000); // reset after 24 hours
 }
 
 void loop() {
+
+  if (reset_timer.isReady()) {
+    digitalWrite(12, LOW);
+  }
 
   KeyItem key;
   boolean known_key_found;
