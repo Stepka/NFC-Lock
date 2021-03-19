@@ -661,8 +661,10 @@ bool Adafruit_PN532::inDataExchange(uint8_t *send, uint8_t sendLength,
 
       return true;
     } else {
+#ifdef PN532DEBUG
       PN532DEBUGPRINT.print(F("Don't know how to handle this command: "));
       PN532DEBUGPRINT.println(pn532_packetbuffer[6], HEX);
+#endif
       return false;
     }
   } else {
