@@ -16,9 +16,6 @@
 // Or use this line for a breakout or shield with an I2C connection:
 Adafruit_PN532 nfc(PN532_IRQ, PN532_RESET);
 
-uint8_t DEFAULT_KEY[6] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
-byte UID_SIZE = 4;
-
 // BUZZER
 
 const int BUZZER = 4;
@@ -76,6 +73,13 @@ byte AID_DATA[] = {
 #define IS_LOCKED_ADDR (0)  // is locked var address
 #define KEYS_DB_ADDR (1)
 
+// KEYS
+
+#define PRIVATE_KEY_TYPE_A (0)
+#define PRIVATE_KEY_TYPE_B (1)
+uint8_t PRIVATE_KEY_DEFAULT[6] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+byte UID_SIZE = 4;
+
 #define KEY_TYPE_ADMIN (0)
 #define KEY_TYPE_MIFARE_CLASSIC (1)
 #define KEY_TYPE_ANDROID (2)
@@ -95,6 +99,10 @@ byte num_keys = 0;
 
 byte locked = 1;
 
+// RESTART
+
+void(* resetFunc) (void) = 0;
+
 // STATE
 
 #define STATE_INIT (0)
@@ -111,12 +119,7 @@ void setup() {
 
   randomSeed(analogRead(0));
 
-  pinMode(9, OUTPUT);
-  pinMode(10, OUTPUT);
-  pinMode(11, OUTPUT);
   pinMode(13, OUTPUT);
-  pinMode(A0, INPUT_PULLUP);
-  pinMode(A1, INPUT_PULLUP);
   pinMode(A2, OUTPUT);
   pinMode(A3, OUTPUT);
 
@@ -126,23 +129,7 @@ void setup() {
 
   // NFC
 
-  nfc.begin();
-
-  uint32_t versiondata = nfc.getFirmwareVersion();
-  if (! versiondata) {
-    Serial.print("Didn't find PN53x board");
-    error_beep();
-    while (1); // halt
-  }
-#ifdef DEBUG
-  // Got ok data, print it out!
-  Serial.print("Found chip PN5"); Serial.println((versiondata >> 24) & 0xFF, HEX);
-  Serial.print("Firmware ver. "); Serial.print((versiondata >> 16) & 0xFF, DEC);
-  Serial.print('.'); Serial.println((versiondata >> 8) & 0xFF, DEC);
-#endif
-
-  // configure board to read RFID tags
-  nfc.SAMConfig();
+  start_rfid_reader();
 
   locked = EEPROM.read(IS_LOCKED_ADDR);
   if (locked > 0) locked = 1;
@@ -175,10 +162,11 @@ void setup() {
     admin_mode_start_beep();
     admin_mode_end_beep();
   }
-  else
-  {
-    ready_beep();
-  }
+
+  //
+
+  //  Timer1.setPeriod(4000000);
+  //  Timer1.enableISR(CHANNEL_A);
 }
 
 void loop() {
@@ -223,8 +211,7 @@ void loop() {
       }
 
       for (byte i = 0; i < num_keys; i++) {
-        if (memcmp(uid, keys[i].uid, UID_SIZE) == 0)
-        {
+        if (memcmp(uid, keys[i].uid, UID_SIZE) == 0) {
           key = keys[i];
           known_key_found = true;
           break;
@@ -239,7 +226,7 @@ void loop() {
 #endif
         if (key.type == KEY_TYPE_ADMIN)
         {
-          success = auth_milfare(uid, key.key_A, key.sector);
+          success = auth_mifare(uid, key.key_A, key.sector, PRIVATE_KEY_TYPE_A);
           if (success)
           {
             switch (lock_state) {
@@ -259,7 +246,7 @@ void loop() {
           switch (lock_state) {
 
             case STATE_LOCK:
-              success = auth_milfare(uid, key.key_A, key.sector);
+              success = auth_mifare(uid, key.key_A, key.sector, PRIVATE_KEY_TYPE_A);
               if (success)
               {
                 switch_lock();
@@ -283,6 +270,7 @@ void loop() {
         }
         else
         {
+          // it is android key (KEY_TYPE_ANDROID)
           switch (lock_state) {
 
             case STATE_LOCK:
@@ -322,9 +310,9 @@ void loop() {
             {
 #ifdef DEBUG
               Serial.println("New android device added");
-              ready_beep ();
-              ready_beep ();
 #endif
+              ready_beep ();
+              ready_beep ();
             }
             else
             {
@@ -333,9 +321,9 @@ void loop() {
               {
 #ifdef DEBUG
                 Serial.println("New card added");
-                ready_beep ();
-                ready_beep ();
 #endif
+                ready_beep ();
+                ready_beep ();
               }
               else
               {
@@ -353,6 +341,8 @@ void loop() {
   } else {
     if (lock_state != STATE_INIT) {
       switch_state(STATE_LOCK);
+
+      resetFunc();
     }
   }
   delay(1000);
@@ -395,16 +385,15 @@ void send_command(byte command, byte* data, uint8_t dataLength, byte *response) 
   response[1] = INFO_TIMEOUT;
 }
 
-boolean auth_milfare(byte* uid, byte* keya, uint8_t sector) {
-  uint8_t block = 0;
+boolean auth_mifare(byte* uid, byte* key, uint8_t sector, uint8_t key_type) {
   uint8_t success;
 
-  success = nfc.mifareclassic_AuthenticateBlock(uid, UID_SIZE, sector * 4 + block, 0, keya);
+  success = nfc.mifareclassic_AuthenticateBlock(uid, UID_SIZE, sector * 4, key_type, key);
 
   if (!success)
   {
 #ifdef DEBUG
-    Serial.println("auth_milfare: Auth failed");
+    Serial.println("auth_mifare: Auth failed");
 #endif
   }
 
@@ -414,10 +403,6 @@ boolean auth_milfare(byte* uid, byte* keya, uint8_t sector) {
 
 boolean read_uid_android(byte *response) {
   byte responseData[32];
-
-#ifdef DEBUG
-  Serial.println("RFID_CHECK_AID_COMMAND");
-#endif
 
   send_command(RFID_CHECK_AID_COMMAND, AID_DATA, sizeof(AID_DATA), responseData);
 
@@ -429,10 +414,6 @@ boolean read_uid_android(byte *response) {
       for (byte j = 0; j < 4; j++) {
         response[j] = responseData[j + 1];
       }
-#ifdef DEBUG
-      Serial.println("CARD_UID");
-      nfc.PrintHex( response, 4 );
-#endif
       return true;
 
     case CARD_ERROR_RESPONSE:
@@ -462,11 +443,6 @@ boolean auth_android(byte* keya) {
   for (byte i = 0; i < 16; i++) {
     rfid_data[i] = random(255);
   }
-
-#ifdef DEBUG
-  Serial.println("RFID_AUTH_COMMAND");
-#endif
-
 
   send_command(RFID_AUTH_COMMAND, rfid_data, sizeof(rfid_data), responseData);
 
@@ -498,7 +474,6 @@ boolean auth_android(byte* keya) {
 ////////////
 
 void ready_beep () {
-
   tone(BUZZER, 400);
   delay(100);
   tone(BUZZER, 2400);
@@ -507,14 +482,12 @@ void ready_beep () {
 }
 
 void wait_beep () {
-
   tone(BUZZER, 2400);
   delay(100);
   noTone(BUZZER);
 }
 
 void error_beep () {
-
   tone(BUZZER, 400);
   delay(100);
   tone(BUZZER, 400);
@@ -525,7 +498,6 @@ void error_beep () {
 }
 
 void admin_mode_start_beep () {
-
   tone(BUZZER, 1000);
   delay(100);
   tone(BUZZER, 2000);
@@ -538,7 +510,6 @@ void admin_mode_start_beep () {
 }
 
 void admin_mode_end_beep () {
-
   tone(BUZZER, 4000);
   delay(100);
   tone(BUZZER, 3000);
@@ -576,9 +547,6 @@ void switch_lock () {
   digitalWrite(A3, 0);
 
   EEPROM.write(IS_LOCKED_ADDR, locked);
-#ifdef DEBUG
-  Serial.println("Lock switched");
-#endif
 }
 
 void switch_state (byte newState) {
@@ -655,10 +623,14 @@ boolean add_key (KeyItem key) {
       case KEY_TYPE_ADMIN:
       case KEY_TYPE_MIFARE_CLASSIC:
       default:
-        uint8_t sector = write_key_to_milfare(key);
+        uint8_t sector = write_key_to_mifare(key);
         if (sector > 0) {
           success = true;
           key.sector = sector;
+#ifdef DEBUG
+          Serial.print("WRITING KEY: key was written to sector ");
+          Serial.println(sector);
+#endif
         }
     }
   } else {
@@ -678,30 +650,39 @@ boolean add_key (KeyItem key) {
 }
 
 boolean remove_key (KeyItem key) {
-  KeyItem old_keys[5];
+  byte replace_i = 0;
   for (byte i = 0; i < num_keys; i++) {
-    old_keys[i] = keys[i];
-  }
-
-  byte next_i = 0;
-  for (byte i = 0; i < num_keys; i++) {
-    if (old_keys[i].uid != key.uid) {
-      keys[next_i] = old_keys[i];
-      next_i++;
+    if (memcmp(key.uid, keys[i].uid, UID_SIZE) == 0) {
+      replace_i = i;
+      break;
     }
   }
-  num_keys--;
-  write_keys_to_db();
+  // Admin key (i == 0) cannot be removed
+  if (replace_i > 0) {
+    for (byte i = replace_i; i < num_keys - 1; i++) {
+      keys[i] = keys[i + 1];
+    }
+    num_keys--;
+    write_keys_to_db();
+
+    if (key.type == KEY_TYPE_MIFARE_CLASSIC) {
+      remove_key_from_mifare(key);
+    }
+#ifdef DEBUG
+    Serial.println("ERASING KEY: this key was removed:");
+    nfc.PrintHex( key.uid, sizeof(key.uid) );
+#endif
+  }
 }
 
-uint8_t write_key_to_milfare(KeyItem key) {
+uint8_t write_key_to_mifare(KeyItem key) {
   uint8_t success = false;
   // 0 is not valid sector
   uint8_t sector = 0;
   uint8_t uidLength;
 
   for (uint8_t i = 1; i < 15; i++) {
-    success = auth_milfare(key.uid, DEFAULT_KEY, i);
+    success = auth_mifare(key.uid, PRIVATE_KEY_DEFAULT, i, PRIVATE_KEY_TYPE_A);
     if (success) {
       if (!check_if_key_exist(key.uid)) {
         sector = i;
@@ -724,18 +705,49 @@ uint8_t write_key_to_milfare(KeyItem key) {
     for (uint8_t i = 0; i < 6; i++) {
       newkeys[10 + i] = key.key_B[i];
     }
-    success = nfc.mifareclassic_WriteDataBlock (sector * 4 + 3, newkeys);
+    success = nfc.mifareclassic_WriteDataBlock(sector * 4 + 3, newkeys);
   }
 
   return sector;
 }
 
+uint8_t remove_key_from_mifare(KeyItem key) {
+  uint8_t success = false;
+
+  success = auth_mifare(key.uid, key.key_B, key.sector, PRIVATE_KEY_TYPE_B);
+
+  if (success) {
+    // transpot configuration
+    uint8_t access_bits[4] = { 0xFF, 0x07, 0x80, 0xFF };
+    uint8_t newkeys[16];
+    for (uint8_t i = 0; i < 6; i++) {
+      newkeys[i] = PRIVATE_KEY_DEFAULT[i];
+    }
+    for (uint8_t i = 0; i < 4; i++) {
+      newkeys[6 + i] = access_bits[i];
+    }
+    for (uint8_t i = 0; i < 6; i++) {
+      newkeys[10 + i] = PRIVATE_KEY_DEFAULT[i];
+    }
+    success = nfc.mifareclassic_WriteDataBlock(key.sector * 4 + 3, newkeys);
+
+    if (!success) {
+#ifdef DEBUG
+      Serial.println("ERASING KEY: cannot write default key with key B");
+#endif
+    }
+  }
+  else {
+#ifdef DEBUG
+    Serial.println("ERASING KEY: cannot authentificate with key B");
+#endif
+  }
+
+  return success;
+}
+
 boolean write_key_to_android(KeyItem key) {
   byte responseData[32];
-
-#ifdef DEBUG
-  Serial.println("RFID_ADD_KEY_COMMAND");
-#endif
 
   send_command(RFID_ADD_KEY_COMMAND, key.key_A, sizeof(key.key_A), responseData);
 
@@ -777,11 +789,6 @@ void read_keys_db () {
   }
 
   db_pointer++;
-#ifdef DEBUG
-  Serial.print("Car know ");
-  Serial.print(num_keys);
-  Serial.println(" keys");
-#endif
 
   for (byte i = 0; i < num_keys; i++) {
     EEPROM.get( db_pointer, key );
@@ -794,11 +801,6 @@ void read_keys_db () {
     Serial.println( key.type );
     Serial.println( key.sector );
     nfc.PrintHex( key.uid, sizeof(key.uid) );
-    Serial.println( "" );
-    nfc.PrintHex( key.key_A, sizeof(key.key_A) );
-    Serial.println( "" );
-    nfc.PrintHex( key.key_B, sizeof(key.key_B) );
-    Serial.println( "" );
 #endif
 
     keys[i] = key;
@@ -820,4 +822,37 @@ void reset_db () {
   byte db_pointer = KEYS_DB_ADDR;
   EEPROM.write(db_pointer, 0);
   write_keys_to_db();
+}
+
+
+////////////////
+// SELF CARE
+////////////////
+
+void start_rfid_reader () {
+  nfc.begin();
+  boolean success = check_rfid_reader();
+  if (success) {
+    // configure board to read RFID tags
+    nfc.SAMConfig();
+  }
+}
+
+boolean check_rfid_reader () {
+  uint32_t versiondata = nfc.getFirmwareVersion();
+  if (! versiondata) {
+#ifdef DEBUG
+    Serial.print("Didn't find PN53x board");
+    error_beep();
+#endif
+    return false;
+  }
+#ifdef DEBUG
+  // Got ok data, print it out!
+  Serial.print("Found chip PN5"); Serial.println((versiondata >> 24) & 0xFF, HEX);
+  Serial.print("Firmware ver. "); Serial.print((versiondata >> 16) & 0xFF, DEC);
+  Serial.print('.'); Serial.println((versiondata >> 8) & 0xFF, DEC);
+  ready_beep();
+#endif
+  return true;
 }
