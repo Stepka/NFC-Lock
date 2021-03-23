@@ -103,6 +103,11 @@ byte locked = 1;
 
 void(* resetFunc) (void) = 0;
 
+#include "GyverTimers.h"
+
+#define RESET_PIN (5)
+byte reset_count = 0;
+
 // STATE
 
 #define STATE_INIT (0)
@@ -114,11 +119,13 @@ byte lock_state = STATE_INIT;
 //
 
 void setup() {
+  digitalWrite(RESET_PIN, HIGH);
 
   Serial.begin(9600);
 
   randomSeed(analogRead(0));
 
+  pinMode(RESET_PIN, OUTPUT);
   pinMode(13, OUTPUT);
   pinMode(A2, OUTPUT);
   pinMode(A3, OUTPUT);
@@ -165,8 +172,8 @@ void setup() {
 
   //
 
-  //  Timer1.setPeriod(4000000);
-  //  Timer1.enableISR(CHANNEL_A);
+  Timer1.setPeriod(4000000);
+  Timer1.enableISR(CHANNEL_A);
 }
 
 void loop() {
@@ -342,7 +349,7 @@ void loop() {
     if (lock_state != STATE_INIT) {
       switch_state(STATE_LOCK);
 
-      resetFunc();
+      //      resetFunc();
     }
   }
   delay(1000);
@@ -855,4 +862,12 @@ boolean check_rfid_reader () {
   ready_beep();
 #endif
   return true;
+}
+
+ISR(TIMER1_A) {  // пишем  в сериал
+  reset_count++;
+  if (reset_count > 10) {
+    reset_count = 0;
+    digitalWrite(RESET_PIN, LOW);
+  }
 }
