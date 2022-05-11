@@ -1,5 +1,6 @@
 //#define HARD_ERASE_ARDUINO
 //#define DEBUG
+#define AUTO_RESET_ENABLE
 
 // RFID
 
@@ -868,6 +869,8 @@ ISR(TIMER1_A) {  // пишем  в сериал
   reset_count++;
   if (reset_count > 10) {
     reset_count = 0;
-    digitalWrite(RESET_PIN, LOW);
+    #ifdef AUTO_RESET_ENABLE
+      digitalWrite(RESET_PIN, LOW);
+    #endif
   }
 }
