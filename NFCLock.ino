@@ -29,14 +29,19 @@ AES128 aes128;
 // PROTOCOL
 
 // Custom protocol
-// | type | data |
+// | type | host | data |
 // type:
 //      - response status (ok/error)
 //      - command
+// host:
+//      - host that sent data
 // data:
 //      - none for ok
 //      - info for error
 //      - action or data for commands
+
+// host
+const byte NFC_LAUNCH_KEY = 0x03;
 
 // type
 const byte RFID_CHECK_AID_COMMAND = 0x00;
@@ -58,7 +63,7 @@ const byte INFO_UNKNOWN_AID = 0xfd;
 const byte INFO_TIMEOUT = 0xfc;
 const byte INFO_NO_PIN = 0xfb;
 byte AID_DATA[] = {
-  // 0x00, /* CLA */
+  0x00, /* CLA */
   0xA4, /* INS */
   0x04, /* P1  */
   0x00, /* P2  */
@@ -84,6 +89,7 @@ byte UID_SIZE = 4;
 #define KEY_TYPE_ADMIN (0)
 #define KEY_TYPE_MIFARE_CLASSIC (1)
 #define KEY_TYPE_ANDROID (2)
+#define KEY_TYPE_NTAG (3)
 
 struct KeyItem
 {
@@ -186,6 +192,8 @@ void loop() {
 
   uint8_t uid[] = { 0, 0, 0, 0, 0, 0, 0 };  // Buffer to store the returned UID
   uint8_t uidLength;                        // Length of the UID (4 or 7 bytes depending on ISO14443A card type)
+  //  success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength);
+  //  if (success) {
   if (nfc.inListPassiveTarget(uid, &uidLength)) {
 
     if (lock_state == STATE_INIT) {
@@ -219,7 +227,7 @@ void loop() {
       }
 
       for (byte i = 0; i < num_keys; i++) {
-        if (memcmp(uid, keys[i].uid, UID_SIZE) == 0) {
+        if (memcmp(uid, keys[i].uid, get_uid_size(key.type)) == 0) {
           key = keys[i];
           known_key_found = true;
           break;
@@ -231,6 +239,7 @@ void loop() {
       {
 #ifdef DEBUG
         Serial.println("Known key found");
+        nfc.PrintHex(uid, uidLength);
 #endif
         if (key.type == KEY_TYPE_ADMIN)
         {
@@ -276,13 +285,12 @@ void loop() {
           }
           switch_state(STATE_LOCK);
         }
-        else
+        else if (key.type == KEY_TYPE_NTAG)
         {
-          // it is android key (KEY_TYPE_ANDROID)
           switch (lock_state) {
 
             case STATE_LOCK:
-              success = true;
+              success = auth_ntag(uid, key.key_A);
               if (success)
               {
                 switch_lock();
@@ -304,31 +312,84 @@ void loop() {
           }
           switch_state(STATE_LOCK);
         }
+        else if (key.type == KEY_TYPE_ANDROID)
+        {
+          // it is android key (KEY_TYPE_ANDROID)
+          switch (lock_state) {
+
+            case STATE_LOCK:
+              success = auth_android;
+              if (success)
+              {
+                switch_lock();
+                ready_beep();
+              }
+              else
+              {
+                error_beep();
+              }
+              break;
+
+            case STATE_ADMIN:
+              remove_key(key);
+              ready_beep ();
+              ready_beep ();
+              ready_beep ();
+              ready_beep ();
+              break;
+          }
+          switch_state(STATE_LOCK);
+        }
+        else
+        {
+#ifdef DEBUG
+          Serial.println("Unknown key type found");
+#endif
+          error_beep();
+          switch_state(STATE_LOCK);
+        }
       }
       else
       {
 #ifdef DEBUG
         Serial.println("Unknown key found");
+        nfc.PrintHex( uid, uidLength );
 #endif
         switch (lock_state) {
 
           case STATE_ADMIN:
-            success = create_key(uid, KEY_TYPE_ANDROID);
-            if (success)
-            {
-#ifdef DEBUG
-              Serial.println("New android device added");
-#endif
-              ready_beep ();
-              ready_beep ();
-            }
-            else
-            {
-              success = create_key(uid, KEY_TYPE_MIFARE_CLASSIC);
+            if (uidLength == 4) {
+              success = create_key(uid, KEY_TYPE_ANDROID);
               if (success)
               {
 #ifdef DEBUG
-                Serial.println("New card added");
+                Serial.println("New android device added");
+#endif
+                ready_beep ();
+                ready_beep ();
+              }
+              else
+              {
+                success = create_key(uid, KEY_TYPE_MIFARE_CLASSIC);
+                if (success)
+                {
+#ifdef DEBUG
+                  Serial.println("New card added");
+#endif
+                  ready_beep ();
+                  ready_beep ();
+                }
+                else
+                {
+                  error_beep();
+                }
+              }
+            } else if (uidLength == 7) {
+              success = create_key(uid, KEY_TYPE_NTAG);
+              if (success)
+              {
+#ifdef DEBUG
+                Serial.println("New ntag added");
 #endif
                 ready_beep ();
                 ready_beep ();
@@ -356,10 +417,10 @@ void loop() {
   delay(1000);
 }
 
-boolean check_if_key_exist(byte* uid) {
+boolean check_if_key_exist(KeyItem key) {
 
   for (byte i = 0; i < num_keys; i++) {
-    if (memcmp(uid, keys[i].uid, UID_SIZE) == 0)
+    if (memcmp(key.uid, keys[i].uid, get_uid_size(key.type)) == 0)
     {
       return true;
     }
@@ -368,21 +429,38 @@ boolean check_if_key_exist(byte* uid) {
   return false;
 }
 
+uint8_t get_uid_size(byte key_type) {
+
+  if (key_type == KEY_TYPE_NTAG) {
+    return 7;
+  }
+
+  return 4;
+}
+
 void send_command(byte command, byte* data, uint8_t dataLength, byte *response) {
   byte sendingData[32];
-  sendingData[0] = command;
-  for (byte j = 0; j < dataLength; j++) {
-    sendingData[j + 1] = data[j];
+  if (command == RFID_CHECK_AID_COMMAND) {
+    for (byte j = 0; j < dataLength; j++) {
+      sendingData[j] = data[j];
+    }
+  } else {
+    sendingData[0] = command;
+    sendingData[1] = NFC_LAUNCH_KEY;
+    for (byte j = 0; j < dataLength; j++) {
+      sendingData[2 + j] = data[j];
+    }
+    if (dataLength <= 0) {
+      // we cannot send 1 byte, so just add some salt at the end
+      sendingData[2] = 0xff;
+      dataLength = 1;
+    }
+    dataLength = dataLength + 2;
   }
 
   uint8_t responseLength = 32;
-  if (dataLength <= 0) {
-    // we cannot send 1 byte, so just add some salt at the end
-    sendingData[1] = 0xff;
-    dataLength = 1;
-  }
 
-  if (nfc.inDataExchange(sendingData, dataLength + 1, response, &responseLength)) {
+  if (nfc.inDataExchange(sendingData, dataLength, response, &responseLength)) {
     if (responseLength > 0) {
       return;
     }
@@ -402,6 +480,22 @@ boolean auth_mifare(byte* uid, byte* key, uint8_t sector, uint8_t key_type) {
   {
 #ifdef DEBUG
     Serial.println("auth_mifare: Auth failed");
+#endif
+  }
+
+  return success;
+}
+
+boolean auth_ntag(byte* uid, byte* key) {
+  uint8_t success;
+
+  //  success = nfc.mifareclassic_AuthenticateBlock(uid, UID_SIZE, sector * 4, key_type, key);
+  success = true;
+
+  if (!success)
+  {
+#ifdef DEBUG
+    Serial.println("auth_ntag: Auth failed");
 #endif
   }
 
@@ -607,7 +701,7 @@ boolean create_key (byte* uid, byte key_type) {
     .key_B = {},
     .sector = 0
   };
-  for (byte i = 0; i < UID_SIZE; i++) {
+  for (byte i = 0; i < get_uid_size(key_type); i++) {
     lock_key.uid[i] = uid[i];
   }
   for (byte i = 0; i < 6; i++) {
@@ -628,6 +722,10 @@ boolean add_key (KeyItem key) {
         success = write_key_to_android(key);
         break;
 
+      case KEY_TYPE_NTAG:
+        success = write_key_to_ntag(key);
+        break;
+
       case KEY_TYPE_ADMIN:
       case KEY_TYPE_MIFARE_CLASSIC:
       default:
@@ -636,7 +734,9 @@ boolean add_key (KeyItem key) {
           success = true;
           key.sector = sector;
 #ifdef DEBUG
-          Serial.print("WRITING KEY: key was written to sector ");
+          Serial.print("WRITING KEY: this key was written ");
+          nfc.PrintHex( key.uid, sizeof(key.uid) );
+          Serial.print(" to sector ");
           Serial.println(sector);
 #endif
         }
@@ -675,6 +775,8 @@ boolean remove_key (KeyItem key) {
 
     if (key.type == KEY_TYPE_MIFARE_CLASSIC) {
       remove_key_from_mifare(key);
+    } else if (key.type == KEY_TYPE_NTAG) {
+      remove_key_from_ntag(key);
     }
 #ifdef DEBUG
     Serial.println("ERASING KEY: this key was removed:");
@@ -692,7 +794,7 @@ uint8_t write_key_to_mifare(KeyItem key) {
   for (uint8_t i = 1; i < 15; i++) {
     success = auth_mifare(key.uid, PRIVATE_KEY_DEFAULT, i, PRIVATE_KEY_TYPE_A);
     if (success) {
-      if (!check_if_key_exist(key.uid)) {
+      if (!check_if_key_exist(key)) {
         sector = i;
       }
       break;
@@ -717,6 +819,39 @@ uint8_t write_key_to_mifare(KeyItem key) {
   }
 
   return sector;
+}
+
+uint8_t write_key_to_ntag(KeyItem key) {
+  uint8_t success = false;
+  // 0 is not valid sector
+  //  uint8_t sector = 0;
+  //  uint8_t uidLength;
+
+  success = auth_ntag(key.uid, key.key_A);
+  //  if (success) {
+  //    if (check_if_key_exist(key)) {
+  //      sector = i;
+  //    }
+  //    break;
+  //  }
+
+
+  if (success) {
+    //    uint8_t access_bits[4] = { 0x78, 0x77, 0x88, 0xFF };
+    //    uint8_t newkeys[16];
+    //    for (uint8_t i = 0; i < 6; i++) {
+    //      newkeys[i] = key.key_A[i];
+    //    }
+    //    for (uint8_t i = 0; i < 4; i++) {
+    //      newkeys[6 + i] = access_bits[i];
+    //    }
+    //    for (uint8_t i = 0; i < 6; i++) {
+    //      newkeys[10 + i] = key.key_B[i];
+    //    }
+    //    success = nfc.mifareclassic_WriteDataBlock(sector * 4 + 3, newkeys);
+  }
+
+  return success;
 }
 
 uint8_t remove_key_from_mifare(KeyItem key) {
@@ -750,6 +885,41 @@ uint8_t remove_key_from_mifare(KeyItem key) {
     Serial.println("ERASING KEY: cannot authentificate with key B");
 #endif
   }
+
+  return success;
+}
+
+uint8_t remove_key_from_ntag(KeyItem key) {
+  uint8_t success = false;
+
+  success = auth_ntag(key.uid, key.key_A);
+
+  //  if (success) {
+  //    // transpot configuration
+  //    uint8_t access_bits[4] = { 0xFF, 0x07, 0x80, 0xFF };
+  //    uint8_t newkeys[16];
+  //    for (uint8_t i = 0; i < 6; i++) {
+  //      newkeys[i] = PRIVATE_KEY_DEFAULT[i];
+  //    }
+  //    for (uint8_t i = 0; i < 4; i++) {
+  //      newkeys[6 + i] = access_bits[i];
+  //    }
+  //    for (uint8_t i = 0; i < 6; i++) {
+  //      newkeys[10 + i] = PRIVATE_KEY_DEFAULT[i];
+  //    }
+  //    success = nfc.mifareclassic_WriteDataBlock(key.sector * 4 + 3, newkeys);
+  //
+  //    if (!success) {
+  //#ifdef DEBUG
+  //      Serial.println("ERASING KEY: cannot write default key with key B");
+  //#endif
+  //    }
+  //  }
+  //  else {
+  //#ifdef DEBUG
+  //    Serial.println("ERASING KEY: cannot authentificate with key B");
+  //#endif
+  //  }
 
   return success;
 }
@@ -869,8 +1039,8 @@ ISR(TIMER1_A) {  // пишем  в сериал
   reset_count++;
   if (reset_count > 10) {
     reset_count = 0;
-    #ifdef AUTO_RESET_ENABLE
-      digitalWrite(RESET_PIN, LOW);
-    #endif
+#ifdef AUTO_RESET_ENABLE
+    digitalWrite(RESET_PIN, LOW);
+#endif
   }
 }
