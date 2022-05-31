@@ -5,17 +5,16 @@
 // RFID
 
 #include <Wire.h>
-#include <SPI.h>
-// Here we use custom version of the Adafruit_PN532 lib
-#include "Adafruit_PN532.h"
+#include <PN532.h>
+#include <PN532_I2C.h>
 
 // If using the breakout or shield with I2C, define just the pins connected
 // to the IRQ and reset lines.  Use the values below (2, 3) for the shield!
 #define PN532_IRQ   (2)
 #define PN532_RESET (3)  // Not connected by default on the NFC Shield
 
-// Or use this line for a breakout or shield with an I2C connection:
-Adafruit_PN532 nfc(PN532_IRQ, PN532_RESET);
+PN532_I2C pn532i2c(Wire);
+PN532 nfc(pn532i2c); 
 
 // BUZZER
 
@@ -488,9 +487,9 @@ boolean auth_mifare(byte* uid, byte* key, uint8_t sector, uint8_t key_type) {
 
 boolean auth_ntag(byte* uid, byte* key) {
   uint8_t success;
+  uint8_t data[32];
 
-  //  success = nfc.mifareclassic_AuthenticateBlock(uid, UID_SIZE, sector * 4, key_type, key);
-  success = true;
+  success = nfc.mifareultralight_ReadPage(4, data);
 
   if (!success)
   {
