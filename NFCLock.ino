@@ -648,6 +648,13 @@ void switch_lock () {
   digitalWrite(A3, 0);
 
   EEPROM.write(IS_LOCKED_ADDR, locked);
+
+  byte responseData[4];
+  byte data[1];
+  data[0] = locked;
+
+  send_command(RFID_LOCK_SWITCHED, data, sizeof(data), responseData);
+
 }
 
 void switch_state (byte newState) {
