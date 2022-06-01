@@ -317,7 +317,7 @@ void loop() {
           switch (lock_state) {
 
             case STATE_LOCK:
-              success = auth_android;
+              success = auth_android(key.key_A);
               if (success)
               {
                 switch_lock();
