@@ -1529,3 +1529,31 @@ int8_t PN532::felica_Release()
 
   return 1;
 }
+
+
+/**************************************************************************/
+/*!
+    @brief  Auth ntag with given password
+*/
+/**************************************************************************/
+bool PN532::ntag21x_auth(const uint8_t *key)
+{
+    // Prepare the authentication command //
+    pn532_packetbuffer[0] = PN532_COMMAND_INCOMMUNICATETHRU;
+    pn532_packetbuffer[1] = MIFARE_CMD_NTAG_PWD_AUTH;
+    memcpy (pn532_packetbuffer + 2, key, 4);
+
+    if (HAL(writeCommand)(pn532_packetbuffer, 6))
+        return false;
+
+    // Read the response packet
+    HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer));
+
+    // Check if the response is valid and we are authenticated???
+    if (pn532_packetbuffer[0] != 0x00) {
+        DMSG("\nAuthentification failed\n");
+        return false;
+    }
+
+    return true;
+}

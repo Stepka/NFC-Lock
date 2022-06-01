@@ -62,6 +62,7 @@
 #define MIFARE_CMD_DECREMENT                (0xC0)
 #define MIFARE_CMD_INCREMENT                (0xC1)
 #define MIFARE_CMD_STORE                    (0xC2)
+#define MIFARE_CMD_NTAG_PWD_AUTH            (0x1B)
 
 // FeliCa Commands
 #define FELICA_CMD_POLLING                  (0x00)
@@ -177,6 +178,8 @@ public:
     // Mifare Ultralight functions
     uint8_t mifareultralight_ReadPage (uint8_t page, uint8_t *buffer);
     uint8_t mifareultralight_WritePage (uint8_t page, uint8_t *buffer);
+
+    bool ntag21x_auth(const uint8_t *key);
 
     // FeliCa Functions
     int8_t felica_Polling(uint16_t systemCode, uint8_t requestCode, uint8_t *idm, uint8_t *pmm, uint16_t *systemCodeResponse, uint16_t timeout=1000);
