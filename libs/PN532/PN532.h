@@ -180,6 +180,7 @@ public:
     uint8_t mifareultralight_WritePage (uint8_t page, uint8_t *buffer);
 
     bool ntag21x_auth(const uint8_t *key);
+    bool ntag21x_auth(const uint8_t *key, uint8_t *pack);
 
     // FeliCa Functions
     int8_t felica_Polling(uint16_t systemCode, uint8_t requestCode, uint8_t *idm, uint8_t *pmm, uint16_t *systemCodeResponse, uint16_t timeout=1000);

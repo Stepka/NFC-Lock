@@ -1557,3 +1557,22 @@ bool PN532::ntag21x_auth(const uint8_t *key)
 
     return true;
 }
+
+
+/**************************************************************************/
+/*!
+    @brief  Auth ntag with given password
+*/
+/**************************************************************************/
+bool PN532::ntag21x_auth(const uint8_t *key, uint8_t *pack)
+{
+    if (!ntag21x_auth(key)) {
+        return false;
+	}
+	
+	if(pack[0] == pn532_packetbuffer[1] && pack[1] == pn532_packetbuffer[2]) {
+		return true;
+	}
+	
+	return false;
+}

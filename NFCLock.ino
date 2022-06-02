@@ -1,5 +1,5 @@
 //#define HARD_ERASE_ARDUINO
-#define DEBUG
+//#define DEBUG
 #define AUTO_RESET_ENABLE
 
 // RFID
@@ -828,12 +828,6 @@ uint8_t write_key_to_mifare(KeyItem key) {
 uint8_t write_key_to_ntag(KeyItem key) {
   uint8_t success = false;
   uint8_t data[4];
-  // try to auth
-  //  data[0] = 0x00;
-  //  data[1] = 0x01;
-  //  data[2] = 0x02;
-  //  data[3] = 0x03;
-  //  success = nfc.ntag21x_auth(data);
 
   nfc.mifareultralight_ReadPage(3, data);
   int capacity = data[2] * 8;
@@ -846,14 +840,9 @@ uint8_t write_key_to_ntag(KeyItem key) {
   }
 
   // Update PACK
-//  data[0] = 0x07;
-//  data[1] = 0x77;
-//  data[2] = 0x00;
-//  data[3] = 0x00;
   success = nfc.mifareultralight_WritePage(cfg_page_base + 3, key.key_B);
   if (!success)
   {
-    Serial.println(" ERROR!");
     return 0;
   }
 
@@ -863,7 +852,6 @@ uint8_t write_key_to_ntag(KeyItem key) {
   success = nfc.mifareultralight_WritePage(cfg_page_base + 1, data);
   if (!success)
   {
-    Serial.println(" ERROR!");
     return 0;
   }
 
@@ -871,7 +859,6 @@ uint8_t write_key_to_ntag(KeyItem key) {
   success = nfc.mifareultralight_WritePage(cfg_page_base + 2, key.key_A);
   if (!success)
   {
-    Serial.println(" ERROR!");
     return 0;
   }
 
@@ -881,7 +868,6 @@ uint8_t write_key_to_ntag(KeyItem key) {
   success = nfc.mifareultralight_WritePage(cfg_page_base, data);
   if (!success)
   {
-    Serial.println(" ERROR!");
     return 0;
   }
 
@@ -930,7 +916,6 @@ uint8_t remove_key_from_ntag(KeyItem key) {
   success = auth_ntag(key.key_A, key.key_B);
   if (!success)
   {
-    Serial.println(" ERROR!");
     return 0;
   }
 
@@ -950,7 +935,6 @@ uint8_t remove_key_from_ntag(KeyItem key) {
   success = nfc.mifareultralight_WritePage(cfg_page_base + 1, data);
   if (!success)
   {
-    Serial.println(" ERROR!");
     return 0;
   }
 
@@ -962,7 +946,6 @@ uint8_t remove_key_from_ntag(KeyItem key) {
   success = nfc.mifareultralight_WritePage(cfg_page_base + 3, data);
   if (!success)
   {
-    Serial.println(" ERROR!");
     return 0;
   }
 
@@ -970,7 +953,6 @@ uint8_t remove_key_from_ntag(KeyItem key) {
   success = nfc.mifareultralight_WritePage(cfg_page_base + 2, data);
   if (!success)
   {
-    Serial.println(" ERROR!");
     return 0;
   }
 
@@ -980,7 +962,6 @@ uint8_t remove_key_from_ntag(KeyItem key) {
   success = nfc.mifareultralight_WritePage(cfg_page_base, data);
   if (!success)
   {
-    Serial.println(" ERROR!");
     return 0;
   }
 
