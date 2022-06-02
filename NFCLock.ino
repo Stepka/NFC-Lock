@@ -1042,8 +1042,6 @@ void read_keys_db () {
     Serial.println( key.type );
     Serial.println( key.sector );
     nfc.PrintHex( key.uid, sizeof(key.uid) );
-    nfc.PrintHex( key.key_A, sizeof(key.key_A) );
-    nfc.PrintHex( key.key_B, sizeof(key.key_B) );
 #endif
 
     keys[i] = key;
