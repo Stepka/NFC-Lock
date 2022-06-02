@@ -1,5 +1,5 @@
 //#define HARD_ERASE_ARDUINO
-//#define DEBUG
+#define DEBUG
 #define AUTO_RESET_ENABLE
 
 // RFID
@@ -14,7 +14,7 @@
 #define PN532_RESET (3)  // Not connected by default on the NFC Shield
 
 PN532_I2C pn532i2c(Wire);
-PN532 nfc(pn532i2c); 
+PN532 nfc(pn532i2c);
 
 // BUZZER
 
@@ -289,7 +289,7 @@ void loop() {
           switch (lock_state) {
 
             case STATE_LOCK:
-              success = auth_ntag(uid, key.key_A);
+              success = auth_ntag(key.key_A, key.key_B);
               if (success)
               {
                 switch_lock();
@@ -485,11 +485,9 @@ boolean auth_mifare(byte* uid, byte* key, uint8_t sector, uint8_t key_type) {
   return success;
 }
 
-boolean auth_ntag(byte* uid, byte* key) {
+boolean auth_ntag(byte* keyA, byte* keyB) {
   uint8_t success;
-  uint8_t data[32];
-
-  success = nfc.mifareultralight_ReadPage(4, data);
+  success = nfc.ntag21x_auth(keyA, keyB);
 
   if (!success)
   {
@@ -829,35 +827,65 @@ uint8_t write_key_to_mifare(KeyItem key) {
 
 uint8_t write_key_to_ntag(KeyItem key) {
   uint8_t success = false;
-  // 0 is not valid sector
-  //  uint8_t sector = 0;
-  //  uint8_t uidLength;
+  uint8_t data[4];
+  // try to auth
+  //  data[0] = 0x00;
+  //  data[1] = 0x01;
+  //  data[2] = 0x02;
+  //  data[3] = 0x03;
+  //  success = nfc.ntag21x_auth(data);
 
-  success = auth_ntag(key.uid, key.key_A);
-  //  if (success) {
-  //    if (check_if_key_exist(key)) {
-  //      sector = i;
-  //    }
-  //    break;
-  //  }
+  nfc.mifareultralight_ReadPage(3, data);
+  int capacity = data[2] * 8;
 
-
-  if (success) {
-    //    uint8_t access_bits[4] = { 0x78, 0x77, 0x88, 0xFF };
-    //    uint8_t newkeys[16];
-    //    for (uint8_t i = 0; i < 6; i++) {
-    //      newkeys[i] = key.key_A[i];
-    //    }
-    //    for (uint8_t i = 0; i < 4; i++) {
-    //      newkeys[6 + i] = access_bits[i];
-    //    }
-    //    for (uint8_t i = 0; i < 6; i++) {
-    //      newkeys[10 + i] = key.key_B[i];
-    //    }
-    //    success = nfc.mifareclassic_WriteDataBlock(sector * 4 + 3, newkeys);
+  uint8_t cfg_page_base = 0x29;   // NTAG213
+  if (capacity == 0x3E) {
+    cfg_page_base = 0x83;       // NTAG215
+  } else if (capacity == 0x6D) {
+    cfg_page_base = 0xE3;       // NTAG216
   }
 
-  return success;
+  // Update PACK
+//  data[0] = 0x07;
+//  data[1] = 0x77;
+//  data[2] = 0x00;
+//  data[3] = 0x00;
+  success = nfc.mifareultralight_WritePage(cfg_page_base + 3, key.key_B);
+  if (!success)
+  {
+    Serial.println(" ERROR!");
+    return 0;
+  }
+
+  // disable r/w
+  // | PROT | CFG_LCK | RFUI | NFC_CNT_EN | NFC_CNT_PWD_PROT | AUTHLIM (2:0) |
+  data[0] = (1 << 7) | 0x0;
+  success = nfc.mifareultralight_WritePage(cfg_page_base + 1, data);
+  if (!success)
+  {
+    Serial.println(" ERROR!");
+    return 0;
+  }
+
+  // Update password
+  success = nfc.mifareultralight_WritePage(cfg_page_base + 2, key.key_A);
+  if (!success)
+  {
+    Serial.println(" ERROR!");
+    return 0;
+  }
+
+  // Update AUTH0 byte
+  success = nfc.mifareultralight_ReadPage(cfg_page_base, data);
+  data[3] = cfg_page_base; // restrict data from cfg_page_base
+  success = nfc.mifareultralight_WritePage(cfg_page_base, data);
+  if (!success)
+  {
+    Serial.println(" ERROR!");
+    return 0;
+  }
+
+  return 1;
 }
 
 uint8_t remove_key_from_mifare(KeyItem key) {
@@ -897,37 +925,66 @@ uint8_t remove_key_from_mifare(KeyItem key) {
 
 uint8_t remove_key_from_ntag(KeyItem key) {
   uint8_t success = false;
+  uint8_t data[4];
+  // try to auth
+  success = auth_ntag(key.key_A, key.key_B);
+  if (!success)
+  {
+    Serial.println(" ERROR!");
+    return 0;
+  }
 
-  success = auth_ntag(key.uid, key.key_A);
+  nfc.mifareultralight_ReadPage(3, data);
+  int capacity = data[2] * 8;
 
-  //  if (success) {
-  //    // transpot configuration
-  //    uint8_t access_bits[4] = { 0xFF, 0x07, 0x80, 0xFF };
-  //    uint8_t newkeys[16];
-  //    for (uint8_t i = 0; i < 6; i++) {
-  //      newkeys[i] = PRIVATE_KEY_DEFAULT[i];
-  //    }
-  //    for (uint8_t i = 0; i < 4; i++) {
-  //      newkeys[6 + i] = access_bits[i];
-  //    }
-  //    for (uint8_t i = 0; i < 6; i++) {
-  //      newkeys[10 + i] = PRIVATE_KEY_DEFAULT[i];
-  //    }
-  //    success = nfc.mifareclassic_WriteDataBlock(key.sector * 4 + 3, newkeys);
-  //
-  //    if (!success) {
-  //#ifdef DEBUG
-  //      Serial.println("ERASING KEY: cannot write default key with key B");
-  //#endif
-  //    }
-  //  }
-  //  else {
-  //#ifdef DEBUG
-  //    Serial.println("ERASING KEY: cannot authentificate with key B");
-  //#endif
-  //  }
+  uint8_t cfg_page_base = 0x29;   // NTAG213
+  if (capacity == 0x3E) {
+    cfg_page_base = 0x83;       // NTAG215
+  } else if (capacity == 0x6D) {
+    cfg_page_base = 0xE3;       // NTAG216
+  }
 
-  return success;
+  // disable r/w
+  // | PROT | CFG_LCK | RFUI | NFC_CNT_EN | NFC_CNT_PWD_PROT | AUTHLIM (2:0) |
+  data[0] = (0 << 7) | 0x0;
+  success = nfc.mifareultralight_WritePage(cfg_page_base + 1, data);
+  if (!success)
+  {
+    Serial.println(" ERROR!");
+    return 0;
+  }
+
+  // Update PACK
+  data[0] = 0x00;
+  data[1] = 0x00;
+  data[2] = 0x00;
+  data[3] = 0x00;
+  success = nfc.mifareultralight_WritePage(cfg_page_base + 3, data);
+  if (!success)
+  {
+    Serial.println(" ERROR!");
+    return 0;
+  }
+
+  // Update password
+  success = nfc.mifareultralight_WritePage(cfg_page_base + 2, data);
+  if (!success)
+  {
+    Serial.println(" ERROR!");
+    return 0;
+  }
+
+  // Update AUTH0 byte
+  success = nfc.mifareultralight_ReadPage(cfg_page_base, data);
+  data[3] = 0xFF; // restrict data from cfg_page_base
+  success = nfc.mifareultralight_WritePage(cfg_page_base, data);
+  if (!success)
+  {
+    Serial.println(" ERROR!");
+    return 0;
+  }
+
+  return 1;
 }
 
 boolean write_key_to_android(KeyItem key) {
@@ -985,6 +1042,8 @@ void read_keys_db () {
     Serial.println( key.type );
     Serial.println( key.sector );
     nfc.PrintHex( key.uid, sizeof(key.uid) );
+    nfc.PrintHex( key.key_A, sizeof(key.key_A) );
+    nfc.PrintHex( key.key_B, sizeof(key.key_B) );
 #endif
 
     keys[i] = key;
