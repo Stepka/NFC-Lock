@@ -828,15 +828,45 @@ uint8_t write_key_to_mifare(KeyItem key) {
 uint8_t write_key_to_ntag(KeyItem key) {
   uint8_t success = false;
   uint8_t data[4];
+  uint8_t version_info[8];
 
-  nfc.mifareultralight_ReadPage(3, data);
-  int capacity = data[2] * 8;
+  success = nfc.ntag21x_GetVersion(version_info);
+  if  (success) {
+#ifdef DEBUG
+    Serial.println("Version info:");
+    nfc.PrintHex( version_info, sizeof(version_info) );
+#endif
+  } else {
+#ifdef DEBUG
+    Serial.println("Cannot read version info");
+#endif
+  }
 
-  uint8_t cfg_page_base = 0x29;   // NTAG213
-  if (capacity == 0x3E) {
+  int capacity = version_info[6];
+
+  uint8_t cfg_page_base = 0x29; 
+  if (capacity == 0x0F) {
+#ifdef DEBUG
+    Serial.println("It is NTAG213");
+#endif
+    cfg_page_base = 0x29;       // NTAG213
+  } 
+  else if (capacity == 0x11) {
+#ifdef DEBUG
+    Serial.println("It is NTAG215");
+#endif
     cfg_page_base = 0x83;       // NTAG215
-  } else if (capacity == 0x6D) {
+  }
+  else if (capacity == 0x13) {
+#ifdef DEBUG
+    Serial.println("It is NTAG216");
+#endif
     cfg_page_base = 0xE3;       // NTAG216
+  } 
+  else {
+#ifdef DEBUG
+    Serial.println("Unknown ntag");
+#endif
   }
 
   // Update PACK
@@ -845,6 +875,9 @@ uint8_t write_key_to_ntag(KeyItem key) {
   {
     return 0;
   }
+#ifdef DEBUG
+  Serial.println("PACK updated");
+#endif
 
   // disable r/w
   // | PROT | CFG_LCK | RFUI | NFC_CNT_EN | NFC_CNT_PWD_PROT | AUTHLIM (2:0) |
@@ -854,6 +887,9 @@ uint8_t write_key_to_ntag(KeyItem key) {
   {
     return 0;
   }
+#ifdef DEBUG
+  Serial.println("r/w disabled");
+#endif
 
   // Update password
   success = nfc.mifareultralight_WritePage(cfg_page_base + 2, key.key_A);
@@ -861,6 +897,9 @@ uint8_t write_key_to_ntag(KeyItem key) {
   {
     return 0;
   }
+#ifdef DEBUG
+  Serial.println("password updated");
+#endif
 
   // Update AUTH0 byte
   success = nfc.mifareultralight_ReadPage(cfg_page_base, data);
@@ -870,6 +909,9 @@ uint8_t write_key_to_ntag(KeyItem key) {
   {
     return 0;
   }
+#ifdef DEBUG
+  Serial.println("AUTH0 byte updated");
+#endif
 
   return 1;
 }
@@ -919,17 +961,48 @@ uint8_t remove_key_from_ntag(KeyItem key) {
     return 0;
   }
 
-  nfc.mifareultralight_ReadPage(3, data);
-  int capacity = data[2] * 8;
+  uint8_t version_info[8];
 
-  uint8_t cfg_page_base = 0x29;   // NTAG213
-  if (capacity == 0x3E) {
-    cfg_page_base = 0x83;       // NTAG215
-  } else if (capacity == 0x6D) {
-    cfg_page_base = 0xE3;       // NTAG216
+  success = nfc.ntag21x_GetVersion(version_info);
+  if  (success) {
+#ifdef DEBUG
+    Serial.println("Version info:");
+    nfc.PrintHex( version_info, sizeof(version_info) );
+#endif
+  } else {
+#ifdef DEBUG
+    Serial.println("Cannot read version info");
+#endif
   }
 
-  // disable r/w
+  int capacity = version_info[6];
+
+  uint8_t cfg_page_base = 0x29; 
+  if (capacity == 0x0F) {
+#ifdef DEBUG
+    Serial.println("It is NTAG213");
+#endif
+    cfg_page_base = 0x29;       // NTAG213
+  } 
+  else if (capacity == 0x11) {
+#ifdef DEBUG
+    Serial.println("It is NTAG215");
+#endif
+    cfg_page_base = 0x83;       // NTAG215
+  }
+  else if (capacity == 0x13) {
+#ifdef DEBUG
+    Serial.println("It is NTAG216");
+#endif
+    cfg_page_base = 0xE3;       // NTAG216
+  } 
+  else {
+#ifdef DEBUG
+    Serial.println("Unknown ntag");
+#endif
+  }
+
+  // enable r/w
   // | PROT | CFG_LCK | RFUI | NFC_CNT_EN | NFC_CNT_PWD_PROT | AUTHLIM (2:0) |
   data[0] = (0 << 7) | 0x0;
   success = nfc.mifareultralight_WritePage(cfg_page_base + 1, data);
@@ -937,6 +1010,9 @@ uint8_t remove_key_from_ntag(KeyItem key) {
   {
     return 0;
   }
+#ifdef DEBUG
+  Serial.println("r/w bit set to default");
+#endif
 
   // Update PACK
   data[0] = 0x00;
@@ -948,13 +1024,23 @@ uint8_t remove_key_from_ntag(KeyItem key) {
   {
     return 0;
   }
+#ifdef DEBUG
+  Serial.println("PACK restored to default");
+#endif
 
   // Update password
+  data[0] = 0xFF;
+  data[1] = 0xFF;
+  data[2] = 0xFF;
+  data[3] = 0xFF;
   success = nfc.mifareultralight_WritePage(cfg_page_base + 2, data);
   if (!success)
   {
     return 0;
   }
+#ifdef DEBUG
+  Serial.println("password restored to default");
+#endif
 
   // Update AUTH0 byte
   success = nfc.mifareultralight_ReadPage(cfg_page_base, data);
@@ -964,6 +1050,9 @@ uint8_t remove_key_from_ntag(KeyItem key) {
   {
     return 0;
   }
+#ifdef DEBUG
+  Serial.println("AUTH0 restored to default");
+#endif
 
   return 1;
 }

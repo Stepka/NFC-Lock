@@ -52,7 +52,7 @@
 
 #define PN532_MIFARE_ISO14443A              (0x00)
 
-// Mifare Commands
+// Mifare and NTAG Commands
 #define MIFARE_CMD_AUTH_A                   (0x60)
 #define MIFARE_CMD_AUTH_B                   (0x61)
 #define MIFARE_CMD_READ                     (0x30)
@@ -62,6 +62,7 @@
 #define MIFARE_CMD_DECREMENT                (0xC0)
 #define MIFARE_CMD_INCREMENT                (0xC1)
 #define MIFARE_CMD_STORE                    (0xC2)
+#define MIFARE_CMD_NTAG_GET_VERSION         (0x60)
 #define MIFARE_CMD_NTAG_PWD_AUTH            (0x1B)
 
 // FeliCa Commands
@@ -179,6 +180,7 @@ public:
     uint8_t mifareultralight_ReadPage (uint8_t page, uint8_t *buffer);
     uint8_t mifareultralight_WritePage (uint8_t page, uint8_t *buffer);
 
+    uint8_t ntag21x_GetVersion (uint8_t *buffer);
     bool ntag21x_auth(const uint8_t *key);
     bool ntag21x_auth(const uint8_t *key, uint8_t *pack);
 

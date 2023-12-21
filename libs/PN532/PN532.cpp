@@ -1530,6 +1530,39 @@ int8_t PN532::felica_Release()
   return 1;
 }
 
+/**************************************************************************/
+/*!
+    GET_VERSION command
+    @param  buffer      Pointer to the byte array that will hold the
+                        retrieved data (if any)
+*/
+/**************************************************************************/
+uint8_t PN532::ntag21x_GetVersion (uint8_t *buffer)
+{
+    /* Prepare the command */
+    pn532_packetbuffer[0] = PN532_COMMAND_INCOMMUNICATETHRU;
+    pn532_packetbuffer[1] = MIFARE_CMD_NTAG_GET_VERSION;   
+
+    /* Send the command */
+    if (HAL(writeCommand)(pn532_packetbuffer, 2)) {
+        return 0;
+    }
+
+    /* Read the response packet */
+    HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer));
+
+    /* If byte 8 isn't 0x00 we probably have an error */
+    if (pn532_packetbuffer[0] == 0x00) {
+        /* Copy the 8 data bytes to the output buffer         */
+        memcpy (buffer, pn532_packetbuffer + 1, 8);
+    } else {
+        return 0;
+    }
+
+    // Return OK signal
+    return 1;
+}
+
 
 /**************************************************************************/
 /*!
